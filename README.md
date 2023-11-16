@@ -2,12 +2,15 @@
 # Smart Building Monitoring System
 
 ## Overview
-The Smart Building Monitoring System is designed for collecting and monitoring environmental data within a building. This project utilizes Arduino-based sensor nodes to gather data, a Raspberry Pi as a gateway for cloud transmission, and Azure services for efficient data storage and management. Additionally, a computer acts as a real-time monitoring interface, receiving updates through a TCP socket connection.
+The Smart Building Monitoring System is a training example for collecting and monitoring environmental data within a building. This project utilizes Arduino-based sensor nodes to gather data, a Raspberry Pi as a gateway for cloud transmission, and Azure services for efficient data storage and management. Additionally, a computer acts as a real-time monitoring interface, receiving updates through a TCP socket connection.
 
 ## Key Components
 
 ### Arduino Sensor Node
 - Gathers data from various sensors within the building.
+
+- ![Skjermbilde 2023-11-16 105153](https://github.com/Zakaria989/Smart-Building-PCS/assets/58915560/30d680fd-88e2-4317-b554-122fc4e093d5)
+
 
 ### Raspberry Pi Gateway
 - Sends sensor data to Azure IoT Hub for cloud integration.
