@@ -1,0 +1,268 @@
+using Microsoft.Azure.Devices.Client;
+
+using System.IO.Ports;
+
+using System.Text;
+
+using System.Threading.Tasks;
+
+using System.Collections.Concurrent;
+
+using System;
+
+using System.Threading;
+
+using System.Net.Sockets;
+
+using System.Net;
+
+using Azure;
+ 
+class Program
+{
+    static SerialPort _serialPort;
+    static DeviceClient _deviceClient;
+    static string CurrentMessage = string.Empty;
+    static async Task Main(string[] args)
+
+    {
+
+        // Arduino connection info
+        string serialPortPath = "/dev/ttyACM0"; // 
+        int baudRate = 9600; // Match the Arduino's baud rate
+        _serialPort = new SerialPort(serialPortPath, baudRate);
+        // Specify the device connection string
+
+        Console.WriteLine("Trying to get connection");
+        // Second way
+
+        string deviceConnectionString = "HostName=RaspberrypiZakaria.azure-devices.net;SharedAccessKeyName=iothubowner;DeviceId=Arduino;SharedAccessKey=aeik303ckX2qD/z/Rj6v0ESvEyaCQ3ww/AIoTD9j3B4=";
+
+        _deviceClient = DeviceClient.CreateFromConnectionString(deviceConnectionString, TransportType.Mqtt);
+
+        Console.WriteLine("Got connection");
+
+        try
+
+        {
+
+            // Open the serial port
+
+            _serialPort.Open();
+
+            Console.WriteLine("Serial port opened.");
+
+        }
+
+        catch (Exception serialEx)
+
+        {
+
+            Console.WriteLine("Error opening serial port: " + serialEx.Message);
+
+        }
+
+        //Start a separate thread for reading data from the serial port
+
+        // Start the read thread
+        Thread readThread = new Thread(ReadSerial);
+        readThread.Start();
+
+        // Start the send thread
+        Thread sendThread = new Thread(async () => await SendValues());
+        sendThread.Start();
+
+        // Start the receive and process thread
+        Thread receiveThread = new Thread(async () => await ReceiveAndProcessMessages());
+        receiveThread.Start();
+
+        // Start Socket Thread
+        Thread socketThread = new Thread(async () => await StartServer());
+        socketThread.Start();
+
+        // Join the send thread to prevent the application from closing.
+        sendThread.Join();
+
+    }
+
+    static void ReadSerial()
+    {
+            while (true)
+
+            {
+            try
+
+            {
+                if (_serialPort.IsOpen)
+
+                {
+
+                    string message = _serialPort.ReadLine();
+
+                    //Console.WriteLine("Read from Serial: " + message);
+
+                    CurrentMessage = message;
+
+                }
+
+            }
+
+            catch (Exception ex)
+
+            {
+
+                Console.WriteLine("Error reading from Serial: " + ex.Message);
+
+            }
+
+        }
+
+    }
+
+    static async Task SendValues()
+
+    {
+
+        while (true)
+
+        {
+
+            try
+
+            {
+
+                string message = CurrentMessage;
+
+                Console.WriteLine("Sending to Azure: " + message);
+
+                await _deviceClient.SendEventAsync(new Message(Encoding.UTF8.GetBytes(message)));
+
+                Console.WriteLine("Message sent to Azure");
+
+            }
+
+            catch (Exception ex)
+
+            {
+
+                Console.WriteLine("Error sending to Azure: " + ex.Message);
+
+            }
+
+            await Task.Delay(2000); // A 2-second delay between messages as per requirements.
+
+        }
+
+    }
+
+    static async Task ReceiveAndProcessMessages()
+
+    {
+
+        while (true)
+
+        {
+
+            Message receivedMessage = await _deviceClient.ReceiveAsync();
+
+            if (receivedMessage != null)
+
+            {
+
+                try
+
+                {
+
+                    string messageData = Encoding.UTF8.GetString(receivedMessage.GetBytes());
+
+                    Console.WriteLine("Received from Azure: " + messageData);
+
+                    // Send the received message to the Arduino via the serial port
+
+                    if (_serialPort.IsOpen)
+
+                    {
+
+                        _serialPort.WriteLine(messageData);
+
+                        Console.WriteLine("Sent to Arduino: " + messageData);
+
+                    }
+
+                    else
+
+                    {
+
+                        Console.WriteLine("Serial port is not open. Unable to send to Arduino.");
+
+                    }
+
+                }
+
+                catch (Exception ex)
+
+                {
+
+                    Console.WriteLine("Error processing received message: " + ex.Message);
+
+                }
+
+                finally
+
+                {
+
+                    await _deviceClient.CompleteAsync(receivedMessage);
+
+                }
+                    
+            }
+
+            await Task.Delay(1000); // Add a delay to control the frequency of checking for new messages.
+
+        }
+
+    }
+
+    static async Task StartServer()
+
+    {
+
+        IPAddress ipAddress = IPAddress.Parse("169.254.88.165");
+        //IPHostEntry host = Dns.GetHostEntry("localhost");
+        //IPAddress ipAddress = host.AddressList[0];
+
+        IPEndPoint localEndPoint = new IPEndPoint(ipAddress, 11800);
+        try
+        {
+            Socket listener = new Socket(ipAddress.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
+            listener.Bind(localEndPoint);
+            listener.Listen(10);
+
+            Console.WriteLine("Waiting for a connection...");
+            Socket handler = listener.Accept();
+            Console.WriteLine("Got connection");
+
+            while (true)
+            {
+                byte[] msg = Encoding.ASCII.GetBytes(CurrentMessage);
+                handler.Send(msg);
+                Console.WriteLine("Sending");
+                Thread.Sleep(1000);
+            }
+        }
+        catch (Exception e)
+        {
+            Console.WriteLine(e.ToString());
+        }
+
+        Console.WriteLine("\n Press any key to continue...");
+        Console.ReadKey();
+    }
+    public void Dispose()
+    {
+        _serialPort?.Dispose();
+        _deviceClient?.Dispose();
+    }
+
+
+}
